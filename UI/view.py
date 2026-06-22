@@ -64,3 +64,39 @@ class View(ft.UserControl):
 
     def update_page(self):
         self._page.update()
+
+    def popola_dropdown_voti(self, lista_voti):
+
+        opzioni = [ft.dropdown.Option(key=str(voto), text=str(voto)) for voto in lista_voti]
+
+        self._ddrating1.options = opzioni
+        self._ddrating2.options = opzioni  # stessa lista di opzioni, riferimento diverso non serve copiarla
+
+        self.update_page()
+
+    def get_voto_min_selezionato(self):
+        return self._ddrating1.value
+
+    def get_voto_max_selezionato(self):
+        return self._ddrating2.value
+
+    def mostra_errore(self, messaggio):
+        self.create_alert(messaggio)
+
+    def mostra_risultati_grafo(self, num_nodi, num_archi, top_5, num_componenti, componente_max):
+        self.txt_result.controls.clear()
+
+        self.txt_result.controls.append(ft.Text("Grafo correttamente creato:"))
+        self.txt_result.controls.append(ft.Text(f"Numero di nodi: {num_nodi}"))
+        self.txt_result.controls.append(ft.Text(f"Numero di archi: {num_archi}"))
+
+        self.txt_result.controls.append(ft.Text("Top 5 archi:"))
+        for nodo_a, nodo_b, dati in top_5:
+            self.txt_result.controls.append(ft.Text(f"{nodo_a.name} -> {nodo_b.name} : {dati['weight']}"))
+
+        self.txt_result.controls.append(ft.Text(f"Il grafo ha {num_componenti} componenti connesse"))
+        self.txt_result.controls.append(ft.Text(f"La più grande componente connessa è lunga {len(componente_max)}:"))
+        for attore in componente_max:
+            self.txt_result.controls.append(ft.Text(attore.name))
+
+        self.update_page()
