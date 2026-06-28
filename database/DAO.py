@@ -1,110 +1,83 @@
 from database.DB_connect import DBConnect
 
+from model.Actor import Actor
 
 class DAO():
 
+    @staticmethod
+    def getAllRatings():
+        conn = DBConnect.get_connection()
+
+        results = []
+
+        cursor = conn.cursor(dictionary=True)
+        query = "SELECT distinct avg_rating  FROM ratings r  ORDER BY avg_rating "
+
+        cursor.execute(query)
+
+        for row in cursor:
+            results.append(row["avg_rating"])
+
+        cursor.close()
+        conn.close()
+        return results
+
 
     @staticmethod
-    # ----------------------  RECUPERA I VALORI RATING
-    def get_all_rating():
+    def getAllActorsbyRange(rat1, rat2):
         conn = DBConnect.get_connection()
-        result = []
 
-        if conn is None:
-            return result
+        results = []
 
-        try:
-            cursor = conn.cursor(dictionary=True)
-            query= """  SELECT DISTINCT avg_rating
-                        FROM ratings
-                        ORDER BY avg_rating ASC
-                    """
+        cursor = conn.cursor(dictionary=True)
+        query = """select distinct rm.name_id as ActorID, n.name as Name, n.date_of_birth as birth_date
+                    from movie m, role_mapping rm, ratings r, names n 
+                    where n.id = rm.name_id 
+                    and n.date_of_birth IS NOT NULL
+                    and m.id = rm.movie_id 
+                    and m.id = r.movie_id 
+                    and r.avg_rating >= %s
+                    and r.avg_rating <= %s"""
 
-            cursor.execute(query)
+        cursor.execute(query, (rat1,rat2))
 
-            for row in cursor:
-                result.append(row["avg_rating"])
+        for row in cursor:
+            results.append(Actor(**row))
 
-            cursor.close()
-            conn.close()
+        cursor.close()
+        conn.close()
+        return results
 
-        except Exception as e:
-            print(f"Errore nel metodo get_all_rating: {e}")
 
-            if conn:
-                conn.close()
-        return result
 
     @staticmethod
-    #-------------------------- VERTICI DEL GRAFO
-    def get_attori_per_range(rating_min, rating_max):
+    def getAllEdges(rat1, rat2):
         conn = DBConnect.get_connection()
-        result=[]
 
-        if conn is None:
-            return result
+        results = []
 
-        try:
-            cursor = conn.cursor(dictionary=True)
-            query=""" SELECT DISTINCT n.id, n.name, n.date_of_birth
-                      FROM names n 
-                      JOIN role_mapping rm ON n.id = rm.name_id
-                      JOIN movie m ON m.id = rm.movie_id
-                      JOIN ratings r ON m.id = r.movie_id
-                      WHERE r.avg_rating BETWEEN %s AND %s
-                      AND rm.category IN ('actor', 'actress')
-                  """
+        cursor = conn.cursor(dictionary=True)
+        query = """select rm1.name_id as Actor1, rm2.name_id as Actor2, sum( cast(replace(replace(m.worlwide_gross_income, '$', ''),',', '') as unsigned)) as Weight
+                    from movie m, role_mapping rm1, role_mapping rm2, ratings r, names n1, names n2
+                    where m.id = rm1.movie_id
+                    and m.id = rm2.movie_id
+                    and m.id = r.movie_id
+                    and rm1.name_id = n1.id
+                    and rm2.name_id = n2.id
+                    and n1.date_of_birth IS NOT NULL
+                    and n2.date_of_birth IS NOT NULL
+                    and rm1.name_id < rm2.name_id
+                    and r.avg_rating >= %s
+                    and r.avg_rating <= %s
+                    and m.worlwide_gross_income is not null
+                    and m.worlwide_gross_income like '$%'
+                    group by rm1.name_id, rm2.name_id"""
 
-            cursor.execute(query, (rating_min, rating_max))
+        cursor.execute(query, (rat1,rat2))
 
-            for row in cursor:
-                result.append((row["id"], row["name"], row["date_of_birth"]))
+        for row in cursor:
+            results.append((row['Actor1'], row['Actor2'], row['Weight']))
 
-            cursor.close()
-            conn.close()
-        except Exception as e:
-            print(f"Errore nel metodo get_attori_per_range: {e}")
-            if conn:
-                conn.close()
-
-        return result
-
-    @staticmethod
-    # ARCHI
-    def get_incassi_film_comuni(rating_min, rating_max):
-        conn = DBConnect.get_connection()
-        result = []
-
-        if conn is None:
-            return result
-
-        try:
-            cursor = conn.cursor(dictionary=True)
-            # Usiamo DISTINCT per prendere ogni film in comune una sola volta
-            query = """
-                    SELECT DISTINCT rm1.name_id AS id1, rm2.name_id AS id2, m.id AS movie_id, m.worlwide_gross_income AS incasso
-                    FROM role_mapping rm1
-                    JOIN role_mapping rm2 ON rm1.movie_id = rm2.movie_id
-                    JOIN movie m ON rm1.movie_id = m.id
-                    JOIN ratings r ON m.id = r.movie_id
-                    WHERE r.avg_rating BETWEEN %s AND %s
-                    AND rm1.category IN ('actor', 'actress')
-                    AND rm2.category IN ('actor', 'actress')
-                    AND rm1.name_id < rm2.name_id
-                    """
-            cursor.execute(query, (rating_min, rating_max))
-
-            for row in cursor:
-                result.append((row["id1"], row["id2"], row["incasso"]))
-
-            cursor.close()
-            conn.close()
-
-        except Exception as e:
-            print(f"Errore nel metodo get_incassi_film_comuni: {e}")
-            if conn:
-                conn.close()
-
-        return result
-
-
+        cursor.close()
+        conn.close()
+        return results

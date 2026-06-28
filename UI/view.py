@@ -1,116 +1,70 @@
-import flet as ft
+import networkx as nx
+from database.DAO import DAO
+class Model:
+    def __init__(self):
+        self._graph=nx.Graph()
+        self._idMap = {}
 
 
-class View(ft.UserControl):
-    def __init__(self, page: ft.Page):
-        super().__init__()
-        # page stuff
-        self._page = page
-        self._page.title = "Lab12-Simulazione esame"
-        self._page.horizontal_alignment = 'CENTER'
-        self._page.theme_mode = ft.ThemeMode.LIGHT
-        # controller (it is not initialized. Must be initialized in the main, after the controller is created)
-        self._controller = None
-        # graphical elements
-        self._title = None
-        self.txt_name = None
-        self.btn_hello = None
-        self.txt_result = None
-        self.txt_container = None
-
-    def load_interface(self):
-        # title
-        self._title = ft.Text("TdP-Simulazione esame imdb", color="blue", size=24)
-        self._page.controls.append(self._title)
+    def getRatings(self):
+        return DAO.getAllRatings()
 
 
-        self._ddrating1 = ft.Dropdown(label="Voto", hint_text="Rating")
-        self._ddrating2 = ft.Dropdown(label="Voto", hint_text="Rating")
-        self._controller.fillDDsRating()
-        self._btnCreaGrafo = ft.ElevatedButton(text="Crea Grafo", on_click=self._controller.handleCreaGrafo)
+    def buildGraph(self, rat1, rat2):
+        self._graph.clear()
+        self._actors = DAO.getAllActorsbyRange(rat1, rat2)
+        for a in self._actors:
+            self._idMap[a.ActorID] = a
 
-        row1 = ft.Row([self._ddrating1,self._ddrating2, self._btnCreaGrafo], alignment=ft.MainAxisAlignment.CENTER,
-                      vertical_alignment=ft.CrossAxisAlignment.END)
+        self._graph.add_nodes_from(self._actors)
 
-        self._page.controls.append(row1)
+        self._edges = DAO.getAllEdges(rat1, rat2)
+        for e1, e2, w in self._edges:
+            self._graph.add_edge(self._idMap[e1], self._idMap[e2], weight=w)
 
-        self._btnCammino = ft.ElevatedButton(text="Trova Cammino", on_click=self._controller.handleCammino)
+    def getTop5Edges(self):
 
-        row2 = ft.Row([self._btnCammino],
-                      alignment=ft.MainAxisAlignment.CENTER)
-        self._page.controls.append(row2)
-
-        # List View where the reply is printed
-        self.txt_result = ft.ListView(expand=1, spacing=10, padding=20, auto_scroll=True)
-        self._page.controls.append(self.txt_result)
-        self._page.update()
-
-    @property
-    def controller(self):
-        return self._controller
-
-    @controller.setter
-    def controller(self, controller):
-        self._controller = controller
-
-    def set_controller(self, controller):
-        self._controller = controller
-
-    def create_alert(self, message):
-        dlg = ft.AlertDialog(title=ft.Text(message))
-        self._page.dialog = dlg
-        dlg.open = True
-        self._page.update()
-
-    def update_page(self):
-        self._page.update()
-
-    def popola_dropdown_voti(self, lista_voti):
-
-        opzioni = [ft.dropdown.Option(key=str(voto), text=str(voto)) for voto in lista_voti]
-
-        self._ddrating1.options = opzioni
-        self._ddrating2.options = opzioni  # stessa lista di opzioni, riferimento diverso non serve copiarla
-
-        self.update_page()
-
-    def get_voto_min_selezionato(self):
-        return self._ddrating1.value
-
-    def get_voto_max_selezionato(self):
-        return self._ddrating2.value
-
-    def mostra_errore(self, messaggio):
-        self.create_alert(messaggio)
-
-    def mostra_risultati_grafo(self, num_nodi, num_archi, top_5, num_componenti, componente_max):
-        self.txt_result.controls.clear()
-
-        self.txt_result.controls.append(ft.Text("Grafo correttamente creato:"))
-        self.txt_result.controls.append(ft.Text(f"Numero di nodi: {num_nodi}"))
-        self.txt_result.controls.append(ft.Text(f"Numero di archi: {num_archi}"))
-
-        self.txt_result.controls.append(ft.Text("Top 5 archi:"))
-        for nodo_a, nodo_b, dati in top_5:
-            self.txt_result.controls.append(ft.Text(f"{nodo_a.name} -> {nodo_b.name} : {dati['weight']}"))
-
-        self.txt_result.controls.append(ft.Text(f"Il grafo ha {num_componenti} componenti connesse"))
-        self.txt_result.controls.append(ft.Text(f"La più grande componente connessa è lunga {len(componente_max)}:"))
-        for attore in componente_max:
-            self.txt_result.controls.append(ft.Text(attore.name))
-
-        self.update_page()
-
-    def mostra_risultato_cammino(self, cammino):
-        # Puliamo lo schermo dai risultati precedenti
-        self.txt_result.controls.clear()
-
-        self.txt_result.controls.append(
-            ft.Text(f"Cammino massimo trovato (Lunghezza: {len(cammino)} nodi):", weight="bold", color="blue")
+        edges = sorted(
+            self._graph.edges(data=True),
+            key=lambda x: x[2]["weight"],
+            reverse=True
         )
 
-        # Stampiamo l'elenco degli attori nell'ordine del percorso
-        for nodo in cammino:
-            self.txt_result.controls.append(ft.Text(f"{nodo.name} (Età: {nodo.eta})"))
+        return edges[:5]
+    def getBestPath(self):
 
-        self.update_page()
+        self._bestPath = []
+
+        for start in self._graph.nodes():
+            partial = [start]
+            self._ricorsione(partial)
+
+        return self._bestPath
+
+    def _ricorsione(self, partial):
+
+        if len(partial) > len(self._bestPath):
+            self._bestPath = list(partial)
+
+        current = partial[-1]
+
+        for _, successor in self._graph.edges(current):
+
+            # vincolo: età decrescente
+            if successor not in partial and successor.birth_date > current.birth_date:
+                partial.append(successor)
+
+                self._ricorsione(partial)
+
+                partial.pop()
+
+    def getConnectedComponents(self):
+        components = list(nx.connected_components(self._graph))
+        largest = max(components, key=len)
+        return components, largest
+
+    def getNumNodi(self):
+        return len(self._graph.nodes)
+
+    def getNumEdges(self):
+        return len(self._graph.edges)
